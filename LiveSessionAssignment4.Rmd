@@ -1,0 +1,169 @@
+---
+title: "Live Session Assignment 4"
+author: "Adeel Abbasi"
+date: "September 23, 2018"
+output: html_document
+---
+
+```{r echo=TRUE}
+
+library('xml2')
+library('rvest')
+library('tidyr')
+
+# created a function to encapsulate the scrapping functions to help me to reuse it for all the scrapping tasks
+
+# It has following input arguments...
+# -----------------------------------
+# wp          -> It's a webpage reference that need scrapping
+# selector    -> a css selector input to read the value(s) 
+# func        -> developer can send a function that need to invoke before results return to ther caller
+# convert     -> update is another type of fuunction that need to be apply on the data before it returns
+# filter      -> remove the data according to the filter provided 
+# replace     -> for the fiter if a value need to change
+# attr        -> this will work just like css selector but can read the attribute value for the html node
+
+scrapeData <- function(wp, selector, func = NULL, convert = NULL, filter = NULL, replace = "", attr = NULL)
+{
+
+  data_html <- rvest::html_nodes(wp,selector)
+  
+  if (is.null(attr))
+    data <- data_html %>% rvest::html_text()
+  else
+    data <- data_html %>% rvest::html_attr(attr)
+  
+  data <- gsub("  ", "", data)
+  data <- gsub("\n", "", data)
+  
+  if(!is.null(filter)){
+    data <- gsub(filter, replace, data)
+  }
+  
+  if(!is.null(convert)){
+   data <- convert(data)
+  }
+  
+  if (!is.null(func)){
+    func(data)
+  }
+  else{
+    data
+  }
+}
+
+```
+
+## Q1 Harry Potter Cast 
+
+### IMDB Reference
+
+```{r}
+
+url <- "http://www.imdb.com/title/tt1201607/fullcredits?ref_=tt_ql_1"
+webpage <- url %>% read_html()
+
+```
+
+#### I've used two technique to scrap the data from the website
+
+#### 1. Find the name of Actor from the IMG html node becuase every image has a Title attribute that contains the name of the actor
+
+#### 2. character class contains the name of the character of the Actor
+
+```{r}
+
+# Read's the primary_phot image node, and read the Title attribute
+movie.actors <- scrapeData(webpage, ".primary_photo img", attr = 'title')
+
+# Read's the character class
+movie.character <- scrapeData(webpage, ".character")
+
+# creates a dataframe for Actors and Character
+movie.df <- data.frame(Actor = movie.actors, Character = movie.character)
+
+# Extract the First Name and Surname by using the Regular Expression...
+movie.df <- extract(movie.df, Actor, c("First Name", "Surname"), "(^[[\\w\\W\\s]]+) ([[\\w\\W]]+)")
+
+# Display the first 10 values from the the dataframe
+head(movie.df, n = 10)
+
+```
+
+
+# Question 2 - SportsBall 
+
+```{r}
+
+# Reading a website page URL
+espnURL <- "http://www.espn.com/nba/team/stats/_/name/sa/san-antonio-spurs"
+espn_data <- espnURL %>% read_html()
+
+```
+
+```{r}
+
+# Read the table head class that will give all the tables from the page
+tablehead <- espn_data %>% html_nodes(xpath='//*[@class="tablehead"]')
+
+# Creates a html_table from the data and find the second table that is of shooting stats 
+shooting.stats <- html_table(tablehead, fill = TRUE, header = TRUE)[[2]]
+
+# create a dataframe by removing the heading and total row fo the vector
+shooting.dataframe <- data.frame(Player = shooting.stats[-c(1,length(shooting.stats)+1), ])
+
+#redefine the dataframe columns name
+names(shooting.dataframe) <- c('PLAYER', 'FGM', 'FGA', 'FG%', '3PM','3PA', '3P%',	
+                               'FTM', 'FTA', 'FT%', '2PM', '2PA', '2P%', 'PPS', 'AFG%')
+# extract the first+middle name and last name
+shooting.dataframe <- extract(shooting.dataframe, PLAYER, c("PLAYER", "POSITION"), "(^[[\\w\\W\\s]]+), ([[\\w\\W]]+)")
+
+# convert all the columns name to numeric
+shooting.dataframe[, -c(1:2)] = lapply(shooting.dataframe[, -c(1:2)], as.numeric)
+
+# verify the types are updated correctly
+checkType  <- sapply(shooting.dataframe[1,], class) # Type should be numeric for number data
+
+  
+```
+
+#### Generate a barplot
+
+```{r}
+# Generate a plot for the shooting datafrom
+# Make is horizontal so it looks easy to ead
+# hide the x label
+barplot(shooting.dataframe$`FG%`, main = "Players", horiz = TRUE, las=1, xlab = 'Field Goals Percentage per game', col=c(rainbow(length(shooting.dataframe$PLAYER))),  width = 20)
+
+# add a legend to the right corner to help reading the player and its FG% 
+legend("bottomright", legend = shooting.dataframe$PLAYER, cex = 0.8, 
+       ncol = 2, fill = c(rainbow(length(shooting.dataframe$PLAYER))))
+
+# only problem in the graph is the order of the names in the legend - first bar name is showing at the end of legend, 2nd name shown at the second last row in the legend.
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
